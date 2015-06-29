@@ -1,0 +1,14 @@
+June 2015
+In the past two week, I finished adding a netfilter hook for cbsensor. The purpose of adding a hook to netfilter is to detect web proxy request. The hook function will check all outgoing packets, and see whether it is a web proxy request (tcp packet, http protocol, using absolute path). 
+
+Adding a kernel module is actually not that hard. A Makefile for building a kernel module exists in /lib/modules/{KVERSION}/build. 'insmod', 'rmmod' are used for inserting and removing modules in or out the kernel. printk is the very important for debuging kernel module code, which is the only way that I figure out so far. A simple mistake in the kernel code, such as accessing illegal memory, will break down the system.
+
+Netfilter is a kernel module that provides additional functionalities to intercept, manipulate network packets. A hook can be added at different stage of packet flow, prerouting, local_in, forwarding, postrouting, local_out. In order to look at all outgoing packet, I need to add a hook function at netfilter local out stage. The hook function will be given a pointer to a struct sk_buff, which is the most fundamental data structure in Linux networking code. It contains data such as network layer headers (ip header), transport layer headers (udp/tcp header), and also packet payload. However, in some operating system, the sk_buff data may not be linear. For example, a sk_buff for an outgoing packet in Ubuntu copies the payload into itself, while one in CentOs will has pointer to where the payload is. Nonlinear data can be accessed from struct skb_shared_info by skb_shinfo(skb). skb_copy_bits can be used to copy nonlinear data.
+
+goto statement is commonly used in kernel code. Using goto helps the alignment of code. So using goto is not a bad behavior, which is different from what I learned at school.
+
+Cbsensor consists of two main part, cbsensor and cbdaemon. Cbsensor is a kernel module that is looking at system level, like data read and write, network packets, processes running, and etc. It logs these information through eventlog manager, and cbdaemon can read these event log later. Cbdaemon is a service that runs as a daemon in the background. It takes the responsiblity of communicating between a cbserver and its endpoint.
+
+Jun 29 2015
+Netfilter gives me a hard time to get udp header. I was using the
+skb_transport_header(skb) to get the address of the udp header. However
