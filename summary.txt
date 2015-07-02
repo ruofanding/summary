@@ -1,14 +1,84 @@
-June 2015
-In the past two week, I finished adding a netfilter hook for cbsensor. The purpose of adding a hook to netfilter is to detect web proxy request. The hook function will check all outgoing packets, and see whether it is a web proxy request (tcp packet, http protocol, using absolute path). 
+June22-27 2015
+LNX-148
+In the past two week, I finished adding a netfilter hook for cbsensor. The
+purpose of adding a hook to netfilter is to detect web proxy request. The hook
+function will check all outgoing packets, and see whether it is a web proxy
+request (tcp packet, http protocol, using absolute path). 
 
-Adding a kernel module is actually not that hard. A Makefile for building a kernel module exists in /lib/modules/{KVERSION}/build. 'insmod', 'rmmod' are used for inserting and removing modules in or out the kernel. printk is the very important for debuging kernel module code, which is the only way that I figure out so far. A simple mistake in the kernel code, such as accessing illegal memory, will break down the system.
+Adding a kernel module is actually not that hard. A Makefile for building a
+kernel module exists in /lib/modules/{KVERSION}/build. 'insmod', 'rmmod' are
+used for inserting and removing modules in or out the kernel. printk is the very
+important for debuging kernel module code, which is the only way that I figure
+out so far. A simple mistake in the kernel code, such as accessing illegal
+memory, will break down the system.
 
-Netfilter is a kernel module that provides additional functionalities to intercept, manipulate network packets. A hook can be added at different stage of packet flow, prerouting, local_in, forwarding, postrouting, local_out. In order to look at all outgoing packet, I need to add a hook function at netfilter local out stage. The hook function will be given a pointer to a struct sk_buff, which is the most fundamental data structure in Linux networking code. It contains data such as network layer headers (ip header), transport layer headers (udp/tcp header), and also packet payload. However, in some operating system, the sk_buff data may not be linear. For example, a sk_buff for an outgoing packet in Ubuntu copies the payload into itself, while one in CentOs will has pointer to where the payload is. Nonlinear data can be accessed from struct skb_shared_info by skb_shinfo(skb). skb_copy_bits can be used to copy nonlinear data.
+Netfilter is a kernel module that provides additional functionalities to
+intercept, manipulate network packets. A hook can be added at different stage of
+packet flow, prerouting, local_in, forwarding, postrouting, local_out. In order
+to look at all outgoing packet, I need to add a hook function at netfilter local
+out stage. The hook function will be given a pointer to a struct sk_buff, which
+is the most fundamental data structure in Linux networking code. It contains
+data such as network layer headers (ip header), transport layer headers (udp/tcp
+header), and also packet payload. However, in some operating system, the sk_buff
+data may not be linear. For example, a sk_buff for an outgoing packet in Ubuntu
+copies the payload into itself, while one in CentOs will has pointer to where
+the payload is. Nonlinear data can be accessed from struct skb_shared_info by
+skb_shinfo(skb). skb_copy_bits can be used to copy nonlinear data.
 
-goto statement is commonly used in kernel code. Using goto helps the alignment of code. So using goto is not a bad behavior, which is different from what I learned at school.
+goto statement is commonly used in kernel code. Using goto helps the alignment
+of code. So using goto is not a bad behavior, which is different from what I
+learned at school.
 
-Cbsensor consists of two main part, cbsensor and cbdaemon. Cbsensor is a kernel module that is looking at system level, like data read and write, network packets, processes running, and etc. It logs these information through eventlog manager, and cbdaemon can read these event log later. Cbdaemon is a service that runs as a daemon in the background. It takes the responsiblity of communicating between a cbserver and its endpoint.
+Cbsensor consists of two main part, cbsensor and cbdaemon. Cbsensor is a kernel
+module that is looking at system level, like data read and write, network
+packets, processes running, and etc. It logs these information through eventlog
+manager, and cbdaemon can read these event log later. Cbdaemon is a service that
+runs as a daemon in the background. It takes the responsiblity of communicating
+between a cbserver and its endpoint. The build of cbsensor is not trivial. It
+consists of many third party libraries, like curl, google protobuff, etc. The
+source code of these libraries come together with the cbsensor source file, and
+will be compile at build time. In this way, cbsensor uses the static library,
+instead of dynamic libraries. The issue I had was that cbsensor was not able to
+communicate with cbserver. I traced to the Curl part, and it was curl
+operating incorrectly. It turned out that because I didn't install openSSL, curl
+will just work without any encryption/decryption. After download the source file
+of openSSL, it works.
 
 Jun 29 2015
+LNX-167
 Netfilter gives me a hard time to get udp header. I was using the
-skb_transport_header(skb) to get the address of the udp header. However
+skb_transport_header(skb) to get the address of the udp header. When a packet
+goes in from wire, it travels from physical layer, data link layer, network
+layer upwards. In Linux network kernel, transport_header of SKB are not set
+when it first created (by the driver), the SKB is processed layer by layer
+while SKB's data pointer is moved. Netfilter implements in network layer, when
+packet goes up from physical layer, netfilter catches the packet before it 
+reaching transport layer, so transport header may haven't been set when access.
+The simple hack here is to increment the address of ip header by 20 to get the
+address of udp/tcp header. 
+
+June 30 2015
+LNX-153 linux CBLR dir command returns unordered list.
+The Carbon black live response has a command dir to list files under the current
+directory. The issue is the files are listed unorderedly. So I added an
+inserting function to swap elements if they are out of order (Just realise the
+for loop can break if one disorder is found). The hard part is to use google
+protobuf. Protobuf is a mechanism to seralize data structure. It provides
+library for c++, python, java, and etc. A .pb file defines the datasture, and
+protobuf's library will generate header file for the definition. The header file
+has the class definition with getters, setters, which can be used by user's
+program source code directly. Protobuf is great tool for generate complex data
+structures (saves time of writing getter, setters), and a way for transmit data
+between different platform (eg. python <--> C++).
+
+July 1 2015
+LNX-122
+Work LNX-122 to check if a process has written to a file before. If so, ignore
+the rest file write from this process. A few useful kernel libraries are
+inotify, dnotify, fsnotify. Inotify can add watch list for a directory or a
+certain file. However, Inotify is under GPL licence, which can not be used by
+our project. A few import aspects are inode, dentry. 
+The way our product monitors file write is through lsm. Lsm will be triggered
+if a file's permission has been accessed. Now, I need to figure out how to
+write a datastructure to store the information between processes and files.
+Hashtable is good idea. 

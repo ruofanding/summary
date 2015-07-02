@@ -1,0 +1,19 @@
+Enable RPM Fussion For Fedora
+su -c 'yum localinstall --nogpgcheck http://download1.rpmfusion.org/free/el/updates/6/i386/rpmfusion-free-release-6-1.noarch.rpm http://download1.rpmfusion.org/nonfree/el/updates/6/i386/rpmfusion-nonfree-release-6-1.noarch.rpm'
+
+
+Move a commit to another branch
+git cherry-pick <commit>
+
+Squash commits into one
+git rebase -i <commit>
+This will bring to a vim, where use squash option.
+
+Undo a git command
+git reflog
+git reset <reference_number>
+
+Find a process Id
+pidof <process_name>
+ps -aux | grep <process_name>
+
