@@ -17,3 +17,8 @@ Find a process Id
 pidof <process_name>
 ps -aux | grep <process_name>
 
+Add a user to a group
+gpasswd --add <user_name> <group_name>
+
+Check groups that a user belongs to
+groups <user_name>

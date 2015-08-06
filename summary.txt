@@ -82,3 +82,81 @@ The way our product monitors file write is through lsm. Lsm will be triggered
 if a file's permission has been accessed. Now, I need to figure out how to
 write a datastructure to store the information between processes and files.
 Hashtable is good idea. 
+
+July 6-7 2015
+LNX-122
+Keep working on LNX-122. Recreated a hash table for kernel module based on
+Christ's exisitng hash table. The issue of his hash table is that the key has
+to be 64bits. I extended his hash table to make it support key of any size. I
+made one mistake that took me half day to figure it out. I forgot to cast a
+struct pointer to void* before increamented it by a number. Therefore the
+result address was invalid, and crashed the os all the time. One way to debug
+kernel crash is to look at information under /var/crash. It keeps a snapshot
+of memory and syslog at the time system crashes.
+
+Add a hash table for file-hook, and check if a process has written to the file
+before. If so, skip the current log event.
+
+July 8-10 2015
+Working on pyserver. Carbon black uses server-client model. Cbsensor will
+frequently check in with cbserver, and the server tells the sensor what to do,
+such as transmitting data, enabling isolation. The cbsensor collects data,
+like eventlog, locally in /var/lib/cb/. When server tells the sensor to send
+eventlogs, it will zip those data files and send to the server.
+
+Pyserver keeps getting exception of truncated messages. Eventually, I figured that it was because cbdaemon was shutdown while it was writing to eventlog
+file. So truncated data got inside the file that passed to the pyserver.
+
+Jul 15th
+Working on replacing old hashtabl with my new hash-table-generic for nethash.
+
+Jul 19-22nd
+Security.h provides hooks functions for checking before the actual operations.
+sock_recvmsg, sock_recv_skb, inode_free are all hooks functions. At
+sock_recv_skb, struct sock and a packet's data can be accessed, but there's
+not way to get the task_struct (context) at this stage. On the contary, at
+sock_recvmsg, the contact can be acquired, but the actual data of the packet
+is not accessible. So the origin design is to use the inode identifer as the
+key, and store the actual data at sock_recv_skb, and acquire the actual with
+inode identifier at sock_recvmsg, and creates an event with the context and
+payload of the packet. I was trying to redo the nethash by inserting context
+into hashtable at sock_recvmsg, and acquire the context at sock_recv_skb,
+which is in a reverse order. As the recvmsg is a pre-op, it is supposed to be
+called before sock_recv_skb, but in fact the order or these two operations are
+not always the same. However, recvmsg will always be called after sock_rcv_skb
+because recvmsg is used to check whether there is any more packets coming in.
+
+In int socket_recvmsg(struct socket *sock, struct msghdr *msg, int size, int
+flags), sock is a userspace socket struct, msg is struct msghdr. struct msghdr
+contains a member msg_name, and msg_len, which indicates the name, and sizeof
+the name of packet to be received. msg_name is usually set as sockaddr_in. The
+first two bytes of sockaddr struct indicates the family of the socket.
+However, the msg_name is not set at this stage because socket_recvmsg is a
+pre-op hook. So there is no way to get the socket address at this stage.
+
+
+Also, there is a difference between shutdown and close for a socket. shutdown()
+doesn't actually close the file descriptor—it just changes its usability. To
+free a socket descriptor, you need to use close().
+
+Aug
+Working on add hooks for system calls. The linux kernel maintains a system call
+table, which contains pointers to each syscall function. So the userspace
+program will use a corresponding syscall number to invoke the system call. The
+entry for syscall table is now deprecated, so in order to find the address of
+the syscall table, we need to manually look for the address of system call
+table. For linux 64bits, the syscall table starts with FF 14 C5. In order to
+add a hook for a system call, we need to change the address of a system call to
+the address of our fake system call function. Inside the fake system call
+function, it will invoke the actual system call.
+
+However, it doesn't work for fork, vfork, and clone. I guess the issue is
+about the register. Our hook function may change some of the registers, which
+will be used by fork/clone. In order to avoid this issue, we wrote a function
+in assembly which restores all the registers before calling the hook
+functions. And we change the return address on the stack to our post hook.
+The post-hook for fork/clone only occurs in parent context because
+in copy_thread/copy_process/do_fork, the newly generated child process will
+jump to ret_from_fork instead of directly back to do_fork.
+
+Most of the kernel stuff is in arch/x86/.
